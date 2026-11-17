@@ -40,6 +40,7 @@
       margin: 15px 0;
       min-height: 24px;
       font-size: 15px;
+      overflow-wrap: anywhere;
     }
 
     button {
@@ -110,9 +111,10 @@
     async function iniciarLeitor() {
       if (lendo) return;
 
-      if (!window.isSecureContext || !navigator.mediaDevices ||
+      if (!window.isSecureContext ||
+          !navigator.mediaDevices ||
           !navigator.mediaDevices.getUserMedia) {
-        mensagem('A câmera exige acesso seguro HTTPS. Abra esta página pelo GitHub Pages.');
+        mensagem('A câmera exige acesso seguro HTTPS. Abra pelo GitHub Pages.');
         return;
       }
 
@@ -146,20 +148,24 @@
             formatsToSupport: formatos,
             rememberLastUsedCamera: true
           },
-          codigo => {
+          function(codigo) {
             if (codigoEnviado) return;
 
             codigoEnviado = true;
-            document.getElementById('codigoLido').innerHTML =
-              '<p>Código identificado:</p><div class="codigo"></div>';
 
-            document.querySelector('#codigoLido .codigo').textContent = codigo;
+            const area = document.getElementById('codigoLido');
+            area.innerHTML = '<p>Código identificado:</p>';
 
-            mensagem('Código lido! Retornando ao registro de perdas...');
+            const numero = document.createElement('div');
+            numero.className = 'codigo';
+            numero.textContent = codigo;
+            area.appendChild(numero);
+
+            mensagem('Código lido! Enviando para o registro de perdas...');
 
             pararEEnviar(codigo);
           },
-          () => {}
+          function() {}
         );
 
         lendo = true;
@@ -168,7 +174,11 @@
       } catch (erro) {
         leitor = null;
         lendo = false;
-        mensagem('Não foi possível abrir a câmera. Verifique a permissão do navegador. ' + (erro.message || erro));
+
+        mensagem(
+          'Não foi possível abrir a câmera. Verifique a permissão do navegador. ' +
+          (erro.message || erro)
+        );
       }
     }
 
@@ -181,18 +191,31 @@
 
       lendo = false;
 
+      try {
+        if (leitor) leitor.clear();
+      } catch (e) {}
+
+      leitor = null;
+
       if (window.opener && !window.opener.closed) {
         window.opener.postMessage(
           {
             tipo: 'DISKPAO_CODIGO_BARRAS',
             codigo: String(codigo)
           },
-          'https://script.google.com'
+          '*'
         );
 
-        mensagem('Código enviado ao sistema. Você pode retornar à tela de perdas.');
+        mensagem('Código enviado! Retorne à tela de registro de perdas.');
+
+        setTimeout(function() {
+          window.close();
+        }, 700);
+
       } else {
-        mensagem('Não foi possível localizar a tela de perdas. Abra o leitor a partir do sistema.');
+        mensagem(
+          'Não foi possível localizar a tela de perdas. Abra o leitor pelo botão do sistema.'
+        );
       }
     }
 
