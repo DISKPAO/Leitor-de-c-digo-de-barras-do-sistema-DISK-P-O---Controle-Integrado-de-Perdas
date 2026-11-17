@@ -1,1 +1,221 @@
 
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DISK PÃO - Leitor de Código de Barras</title>
+
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 20px;
+      background: #f2f4f7;
+      color: #222;
+      font-family: Arial, sans-serif;
+      text-align: center;
+    }
+
+    .container {
+      max-width: 480px;
+      margin: 20px auto;
+      padding: 22px;
+      background: white;
+      border-radius: 14px;
+      box-shadow: 0 3px 12px rgba(0,0,0,.10);
+    }
+
+    h2 { color: #174d2b; }
+
+    #reader {
+      width: 100%;
+      margin: 20px auto;
+    }
+
+    #mensagem {
+      margin: 15px 0;
+      min-height: 24px;
+      font-size: 15px;
+    }
+
+    button {
+      width: 100%;
+      padding: 15px;
+      margin-top: 10px;
+      border: 0;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    #iniciar {
+      background: #198754;
+      color: white;
+    }
+
+    #fechar {
+      background: #dc3545;
+      color: white;
+    }
+
+    .codigo {
+      padding: 12px;
+      background: #e8f5e9;
+      border-radius: 8px;
+      font-size: 20px;
+      font-weight: bold;
+      overflow-wrap: anywhere;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <h2>DISK PÃO</h2>
+    <h3>Leitor de Código de Barras</h3>
+
+    <p>Posicione o código de barras dentro da área da câmera.</p>
+
+    <div id="reader"></div>
+
+    <div id="mensagem">
+      Clique em iniciar para abrir a câmera.
+    </div>
+
+    <div id="codigoLido"></div>
+
+    <button id="iniciar" onclick="iniciarLeitor()">
+      ABRIR CÂMERA
+    </button>
+
+    <button id="fechar" onclick="fecharLeitor()">
+      FECHAR LEITOR
+    </button>
+  </div>
+
+  <script>
+    let leitor = null;
+    let lendo = false;
+    let codigoEnviado = false;
+
+    function mensagem(texto) {
+      document.getElementById('mensagem').textContent = texto;
+    }
+
+    async function iniciarLeitor() {
+      if (lendo) return;
+
+      if (!window.isSecureContext || !navigator.mediaDevices ||
+          !navigator.mediaDevices.getUserMedia) {
+        mensagem('A câmera exige acesso seguro HTTPS. Abra esta página pelo GitHub Pages.');
+        return;
+      }
+
+      try {
+        codigoEnviado = false;
+        document.getElementById('codigoLido').textContent = '';
+        mensagem('Solicitando acesso à câmera...');
+
+        leitor = new Html5Qrcode('reader');
+
+        const formatos = [
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.UPC_A,
+          Html5QrcodeSupportedFormats.UPC_E,
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.ITF
+        ];
+
+        await leitor.start(
+          { facingMode: 'environment' },
+          {
+            fps: 10,
+            qrbox: function(largura, altura) {
+              return {
+                width: Math.floor(largura * 0.85),
+                height: Math.min(130, Math.floor(altura * 0.35))
+              };
+            },
+            formatsToSupport: formatos,
+            rememberLastUsedCamera: true
+          },
+          codigo => {
+            if (codigoEnviado) return;
+
+            codigoEnviado = true;
+            document.getElementById('codigoLido').innerHTML =
+              '<p>Código identificado:</p><div class="codigo"></div>';
+
+            document.querySelector('#codigoLido .codigo').textContent = codigo;
+
+            mensagem('Código lido! Retornando ao registro de perdas...');
+
+            pararEEnviar(codigo);
+          },
+          () => {}
+        );
+
+        lendo = true;
+        mensagem('Câmera aberta. Aponte para o código de barras.');
+
+      } catch (erro) {
+        leitor = null;
+        lendo = false;
+        mensagem('Não foi possível abrir a câmera. Verifique a permissão do navegador. ' + (erro.message || erro));
+      }
+    }
+
+    async function pararEEnviar(codigo) {
+      try {
+        if (leitor && lendo) {
+          await leitor.stop();
+        }
+      } catch (e) {}
+
+      lendo = false;
+
+      if (window.opener && !window.opener.closed) {
+        window.opener.postMessage(
+          {
+            tipo: 'DISKPAO_CODIGO_BARRAS',
+            codigo: String(codigo)
+          },
+          'https://script.google.com'
+        );
+
+        mensagem('Código enviado ao sistema. Você pode retornar à tela de perdas.');
+      } else {
+        mensagem('Não foi possível localizar a tela de perdas. Abra o leitor a partir do sistema.');
+      }
+    }
+
+    async function fecharLeitor() {
+      try {
+        if (leitor && lendo) {
+          await leitor.stop();
+        }
+      } catch (e) {}
+
+      try {
+        if (leitor) leitor.clear();
+      } catch (e) {}
+
+      leitor = null;
+      lendo = false;
+
+      if (window.opener && !window.opener.closed) {
+        window.close();
+      } else {
+        mensagem('Leitor fechado. Você pode voltar à tela anterior.');
+      }
+    }
+  </script>
+</body>
+</html>
